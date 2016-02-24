@@ -13,7 +13,6 @@ electrum daemon status
     .................,
     .................,
 }
-
 ```
 
  * Python 2.7
@@ -27,4 +26,3 @@ python elctrm.py -h
 ### Stuff
 
  * [electrum](http://docs.electrum.org/en/latest/) Documentation
-
