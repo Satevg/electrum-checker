@@ -11,11 +11,11 @@ import subprocess
 from electrum.wallet import WalletStorage, NewWallet
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--generate_address", help="Generate NUMBER receiving addresses.", type=int, metavar='NUMBER')
-parser.add_argument("--check_balance", metavar='CALLBACK_URL',
+parser.add_argument("-ga", "--generate_address", help="Generate NUMBER receiving addresses.", type=int, metavar='NUMBER')
+parser.add_argument("-cb", "--check_balance", metavar='CALLBACK_URL',
                     help='''Check balance for all addresses.
                             If balance different from value in DB then POST request sent to CALLBACK_URL''', type=str)
-parser.add_argument('wallet_path', metavar='WALLET_PATH', type=str, nargs='+', help='Electrum wallet path')
+parser.add_argument("wallet_path", metavar='WALLET_PATH', type=str, nargs='+', help='Electrum wallet path')
 args = parser.parse_args()
 
 if os.path.isfile(args.wallet_path[0]):
@@ -80,5 +80,6 @@ if args.check_balance:
                     'cur_balance': cur_balance})
                 c.execute("UPDATE electrum SET balance = ? WHERE address =?", (cur_balance, addresses[i]))
                 conn.commit()
+
     conn.close()
     print(str(counter) + ' balance changes found')
