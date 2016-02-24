@@ -4,23 +4,31 @@ import json
 import os
 import re
 import requests
+import sys
 import sqlite3
 import subprocess
 
 from electrum.wallet import WalletStorage, NewWallet
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--generate_address", help="Generate recieving address", type=int)
-parser.add_argument("--check_balance", help="Check balance", type=str)
+parser.add_argument("--generate_address", help="Generate NUMBER receiving addresses.", type=int, metavar='NUMBER')
+parser.add_argument("--check_balance", metavar='CALLBACK_URL',
+                    help='''Check balance for all addresses.
+                            If balance different from value in DB then POST request sent to CALLBACK_URL''', type=str)
+parser.add_argument('wallet_path', metavar='WALLET_PATH', type=str, nargs='+', help='Electrum wallet path')
 args = parser.parse_args()
 
-storage = WalletStorage('/home/satevg/.electrum/wallets/default_wallet')
-w = electrum.wallet.NewWallet(storage)
+if os.path.isfile(args.wallet_path[0]):
+    storage = WalletStorage(args.wallet_path[0])
+    w = electrum.wallet.NewWallet(storage)
+else:
+    print('Wrong Wallet Path!')
+    sys.exit()
 
 if not os.path.isfile('murtcele.db'):
     conn = sqlite3.connect('murtcele.db')
     c = conn.cursor()
-    c.execute("CREATE TABLE electrum (address text, balanse real)")
+    c.execute("CREATE TABLE electrum (address text, balance real)")
 
     # fill db with wallet addresses
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
@@ -29,7 +37,6 @@ if not os.path.isfile('murtcele.db'):
 
     insert = []
     for i in range(0, len(addresses)):
-        print addresses[i]
         balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
         balance = re.findall(pattern, balance)[1]
         insert.append((addresses[i], balance))
@@ -37,6 +44,7 @@ if not os.path.isfile('murtcele.db'):
     c.executemany('INSERT INTO electrum VALUES (?,?)', insert)
     conn.commit()
     conn.close()
+    print('db created, ' + str(len(addresses)) + ' items')
 
 if args.generate_address:
     addresses = []
@@ -48,8 +56,8 @@ if args.generate_address:
         c.execute("INSERT INTO electrum VALUES (?, 0)", (addr,))
         conn.commit()
         conn.close()
-
-    print json.dumps(addresses) # new addr list
+    print('Generated:')
+    print(json.dumps(addresses))  # new addr list
 
 if args.check_balance:
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
@@ -57,13 +65,20 @@ if args.check_balance:
     addresses = re.findall(pattern, addresses)
     conn = sqlite3.connect('murtcele.db')
     c = conn.cursor()
+    counter = 0
     for i in range(0, len(addresses)):
         balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
         cur_balance = re.findall(pattern, balance)[1]
-        c.execute("SELECT balanse from electrum where address=?", (addresses[i],))
-        if c.fetchone()[0]:
-            if old_balance != cur_balance:
-                r = requests.post(args.check_balance, data={'address': addresses[i],
-                                                              'last_balance': old_balance,
-                                                              'cur_balance': cur_balance})
+        c.execute("SELECT balance FROM electrum WHERE address=?", (addresses[i],))
+        old_balance = c.fetchone()[0]
+        if isinstance(old_balance, float):
+            if old_balance != float(cur_balance):
+                counter += 1
+                r = requests.post(args.check_balance, data={
+                    'address': addresses[i],
+                    'prev_balance': old_balance,
+                    'cur_balance': cur_balance})
+                c.execute("UPDATE electrum SET balance = ? WHERE address =?", (cur_balance, addresses[i]))
+                conn.commit()
     conn.close()
+    print(str(counter) + ' balance changes found')
