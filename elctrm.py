@@ -71,6 +71,10 @@ if args.check_balance:
         cur_balance = re.findall(pattern, balance)[1]
         c.execute("SELECT balance FROM electrum WHERE address=?", (addresses[i],))
         old_balance = c.fetchone()[0]
+        if not old_balance and old_balance != 0:
+            c.execute("INSERT INTO electrum VALUES (?, 0)", (addresses[i],))
+            c.commit()
+            continue
         if isinstance(old_balance, float):
             if old_balance != float(cur_balance):
                 counter += 1
