@@ -69,12 +69,15 @@ if args.check_balance:
     for i in range(0, len(addresses)):
         balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
         cur_balance = re.findall(pattern, balance)[1]
+
+        if not c.execute("SELECT * FROM electrum WHERE address=?", (addresses[i],)).fetchone():
+            c.execute("INSERT INTO electrum VALUES (?, 0)", (addresses[i],))
+            conn.commit()
+            continue
+
         c.execute("SELECT balance FROM electrum WHERE address=?", (addresses[i],))
         old_balance = c.fetchone()[0]
-        if not old_balance and old_balance != 0:
-            c.execute("INSERT INTO electrum VALUES (?, 0)", (addresses[i],))
-            c.commit()
-            continue
+        print(str(old_balance) + '----' + addresses[i])
         if isinstance(old_balance, float):
             if old_balance != float(cur_balance):
                 counter += 1
