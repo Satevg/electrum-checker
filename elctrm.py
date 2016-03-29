@@ -25,8 +25,8 @@ else:
     print('Wrong Wallet Path!')
     sys.exit()
 
-if not os.path.isfile('murtcele.db'):
-    conn = sqlite3.connect('murtcele.db')
+if not os.path.isfile('/root/elctrm-chkr/murtcele.db'):
+    conn = sqlite3.connect('/root/elctrm-chkr/murtcele.db')
     c = conn.cursor()
     c.execute("CREATE TABLE electrum (address text, balance real)")
 
@@ -63,7 +63,7 @@ if args.check_balance:
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
     pattern = r'"([A-Za-z0-9_\./\\-]*)"'
     addresses = re.findall(pattern, addresses)
-    conn = sqlite3.connect('murtcele.db')
+    conn = sqlite3.connect('/root/elctrm-chkr/murtcele.db')
     c = conn.cursor()
     counter = 0
     for i in range(0, len(addresses)):
