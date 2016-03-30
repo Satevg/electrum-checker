@@ -2,6 +2,7 @@ import argparse
 import electrum
 import json
 import os
+import pexpect
 import re
 import requests
 import sys
@@ -11,12 +12,16 @@ import subprocess
 from electrum.wallet import WalletStorage, NewWallet
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-ga", "--generate_address", help="Generate NUMBER receiving addresses.", type=int, metavar='NUMBER')
 parser.add_argument("-cb", "--check_balance", metavar='CALLBACK_URL',
                     help='''Check balance for all addresses.
                             If balance different from value in DB then POST request sent to CALLBACK_URL''', type=str)
+parser.add_argument("-pt", "--pay_to", metavar='PAYTO_ADDRESS', type=str)
+parser.add_argument("-a", "--amount", metavar='AMOUNT', type=float)
+parser.add_argument("-pw", "--root_password", metavar='WALLET PASSWORD', type=str)
 parser.add_argument("wallet_path", metavar='WALLET_PATH', type=str, nargs='+', help='Electrum wallet path')
+
 args = parser.parse_args()
+exec_path = os.path.dirname(os.path.realpath(__file__)) + '/'
 
 if os.path.isfile(args.wallet_path[0]):
     storage = WalletStorage(args.wallet_path[0])
@@ -25,10 +30,10 @@ else:
     print('Wrong Wallet Path!')
     sys.exit()
 
-if not os.path.isfile('/root/elctrm-chkr/murtcele.db'):
-    conn = sqlite3.connect('/root/elctrm-chkr/murtcele.db')
+if not os.path.isfile(exec_path + 'murtcele.db'):
+    conn = sqlite3.connect(exec_path + 'murtcele.db')
     c = conn.cursor()
-    c.execute("CREATE TABLE electrum (address text, balance real)")
+    c.execute("CREATE TABLE electrum (id integer primary key autoincrement ,address text, balance real)")
 
     # fill db with wallet addresses
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
@@ -45,19 +50,8 @@ if not os.path.isfile('/root/elctrm-chkr/murtcele.db'):
     conn.commit()
     conn.close()
     print('db created, ' + str(len(addresses)) + ' items')
+    sys.exit()
 
-if args.generate_address:
-    addresses = []
-    for i in range(0, args.generate_address):
-        addr = w.create_new_address()
-        addresses.append(addr)
-        conn = sqlite3.connect('murtcele.db')
-        c = conn.cursor()
-        c.execute("INSERT INTO electrum VALUES (?, 0)", (addr,))
-        conn.commit()
-        conn.close()
-    print('Generated:')
-    print(json.dumps(addresses))  # new addr list
 
 if args.check_balance:
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
@@ -90,3 +84,31 @@ if args.check_balance:
 
     conn.close()
     print(str(counter) + ' balance changes found')
+
+if args.pay_to and args.amount and args.root_password:
+    if subprocess.check_output('electrum validateaddress ' + args.pay_to, shell=True).strip() == 'false':
+        print('Wrong address!')
+        sys.exit()
+
+    balance = subprocess.check_output('electrum getbalance', shell=True)
+    pattern = r'"([A-Za-z0-9_\./\\-]*)"'
+    account_balance = float(re.findall(pattern, balance)[1])
+    if account_balance < args.amount:
+        print('Not enough BTC\'s')
+
+    # payto and broadcast transaction
+    # pzdc below, see https://github.com/spesmilo/electrum/issues/1742
+    print 'go'
+    c = pexpect.spawn('electrum payto ' + args.pay_to + ' ' + str(args.amount)) 
+    c.expect('Password:')
+    c.sendline(args.root_password)
+    c.expect(pexpect.EOF)
+    hs = c.before
+    hex_string = re.findall(pattern, hs)[2]
+    r = requests.post('https://blockchain.info/pushtx', data={'tx': hex_string})
+    if r.status_code == 200:
+        print('Transaction submitted')
+    else:
+        print('Error. Transaction was not submitted')  
+
+    sys.exit()
