@@ -98,8 +98,7 @@ if args.pay_to and args.amount and args.root_password:
 
     # payto and broadcast transaction
     # pzdc below, see https://github.com/spesmilo/electrum/issues/1742
-    print 'go'
-    c = pexpect.spawn('electrum payto ' + args.pay_to + ' ' + str(args.amount)) 
+    c = pexpect.spawn('electrum payto ' + args.pay_to + ' ' + str(args.amount))
     c.expect('Password:')
     c.sendline(args.root_password)
     c.expect(pexpect.EOF)
@@ -109,6 +108,6 @@ if args.pay_to and args.amount and args.root_password:
     if r.status_code == 200:
         print('Transaction submitted')
     else:
-        print('Error. Transaction was not submitted')  
+        print('Error. Transaction was not submitted')
 
     sys.exit()
