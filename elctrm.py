@@ -1,3 +1,6 @@
+from electrum.wallet import WalletStorage, NewWallet
+from datetime import datetime, timedelta
+
 import argparse
 import electrum
 import json
@@ -8,8 +11,6 @@ import requests
 import sys
 import sqlite3
 import subprocess
-
-from electrum.wallet import WalletStorage, NewWallet
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-cb", "--check_balance", metavar='CALLBACK_URL',
@@ -33,7 +34,8 @@ else:
 if not os.path.isfile(exec_path + 'murtcele.db'):
     conn = sqlite3.connect(exec_path + 'murtcele.db')
     c = conn.cursor()
-    c.execute("CREATE TABLE electrum (id integer primary key autoincrement ,address text, balance real)")
+    c.execute('''CREATE TABLE electrum (id integer primary key autoincrement ,address text not null,
+                                        balance real not null, t datetime not null default CURRENT_TIMESTAMP)''')
 
     # fill db with wallet addresses
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
@@ -42,11 +44,11 @@ if not os.path.isfile(exec_path + 'murtcele.db'):
 
     insert = []
     for i in range(0, len(addresses)):
+        print(addresses[i])
         balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
         balance = re.findall(pattern, balance)[1]
-        insert.append((addresses[i], balance))
-
-    c.executemany('INSERT INTO electrum VALUES (?,?)', insert)
+        insert.append((None, addresses[i], balance, datetime.now()))
+    c.executemany('INSERT INTO electrum VALUES (?,?,?,?)', insert)
     conn.commit()
     conn.close()
     print('db created, ' + str(len(addresses)) + ' items')
@@ -57,21 +59,30 @@ if args.check_balance:
     addresses = subprocess.check_output('electrum listaddresses', shell=True)
     pattern = r'"([A-Za-z0-9_\./\\-]*)"'
     addresses = re.findall(pattern, addresses)
-    conn = sqlite3.connect('/root/elctrm-chkr/murtcele.db')
+    conn = sqlite3.connect(exec_path + 'murtcele.db')
     c = conn.cursor()
     counter = 0
     for i in range(0, len(addresses)):
-        balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
-        cur_balance = re.findall(pattern, balance)[1]
-
-        if not c.execute("SELECT * FROM electrum WHERE address=?", (addresses[i],)).fetchone():
-            c.execute("INSERT INTO electrum VALUES (?, 0)", (addresses[i],))
+        entry = c.execute("SELECT * FROM electrum WHERE address=?", (addresses[i],)).fetchone()
+        if not entry:
+            # insert new one
+            c.execute("INSERT INTO electrum VALUES (?, ?, ?, ?)", (None, addresses[i], 0, datetime.now()))
             conn.commit()
             continue
+        else:
+            # check if entry is not too old
+            date_added = datetime.strptime(entry[3], "%Y-%m-%d %H:%M:%S.%f")
+            delta = datetime.now() - date_added
+            print delta.days
+            if delta.days > 5:
+                # skip this address
+                continue
 
+        balance = subprocess.check_output('electrum getaddressbalance ' + addresses[i], shell=True)
+        cur_balance = re.findall(pattern, balance)[1]
         c.execute("SELECT balance FROM electrum WHERE address=?", (addresses[i],))
         old_balance = c.fetchone()[0]
-        print(str(old_balance) + '----' + addresses[i])
+        # print(str(old_balance) + '----' + addresses[i])
         if isinstance(old_balance, float):
             if old_balance != float(cur_balance):
                 counter += 1
