@@ -24,12 +24,21 @@ parser.add_argument("wallet_path", metavar='WALLET_PATH', type=str, nargs='+', h
 args = parser.parse_args()
 exec_path = os.path.dirname(os.path.realpath(__file__)) + '/'
 
+# test electrum daemon
+try:
+    pid = subprocess.check_output('pgrep electrum', shell=True)
+except subprocess.CalledProcessError:
+    # start daemon
+    f = subprocess.call(['electrum', 'daemon', 'start'])
+
+
 if os.path.isfile(args.wallet_path[0]):
     storage = WalletStorage(args.wallet_path[0])
     w = electrum.wallet.NewWallet(storage)
 else:
     print('Wrong Wallet Path!')
     sys.exit()
+
 
 if not os.path.isfile(exec_path + 'murtcele.db'):
     conn = sqlite3.connect(exec_path + 'murtcele.db')
@@ -73,7 +82,6 @@ if args.check_balance:
             # check if entry is not too old
             date_added = datetime.strptime(entry[3], "%Y-%m-%d %H:%M:%S.%f")
             delta = datetime.now() - date_added
-            print delta.days
             if delta.days > 5:
                 # skip this address
                 continue
@@ -95,6 +103,7 @@ if args.check_balance:
 
     conn.close()
     print(str(counter) + ' balance changes found')
+
 
 if args.pay_to and args.amount and args.root_password:
     if subprocess.check_output('electrum validateaddress ' + args.pay_to, shell=True).strip() == 'false':
